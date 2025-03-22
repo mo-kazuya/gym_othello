@@ -6,7 +6,7 @@ setup(
     description='A simple othello',
     author='Kazuya Morikubo',
     author_email='mo.kazuya@gmail.com',
-    url='https://github.com/mo-kazuya/gym_othello',
+    url='https://github.com/mo-kazuya/gym_othello.git',
     packages=find_packages(),
     python_requires='>=3.8',
 )
