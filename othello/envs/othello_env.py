@@ -248,6 +248,20 @@ class OthelloEnv(MultiAgentEnv):
         self.random_offset = random_offset
         self.current_player = None
 
+    def get_observation_space(self, agent_id) -> gym.Space:
+        return self.observation_spaces[agent_id]
+
+    def get_action_space(self, agent_id ) -> gym.Space:
+        return self.action_spaces[agent_id]
+
+    @property
+    def num_agents(self) -> int:
+        return len(self.agents)
+    
+    @property
+    def max_num_agents(self) -> int:
+        return len(self.possible_agents)
+
     def step(self, action):
         self.logger.debug(f"step action:{action}")
         self.logger.debug(f"valid mode:{self.Board.get_valid_moves(self.Board.current_player)}")
