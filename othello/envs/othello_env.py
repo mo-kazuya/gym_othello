@@ -205,8 +205,8 @@ class Player:
         # Implement logic to get the move
         return 0, 0  # Placeholder for actual
     
-from ray.rllib.env.multi_agent_env import MultiAgentEnv
-class OthelloEnv(MultiAgentEnv):
+# from ray.rllib.env.multi_agent_env import MultiAgentEnv
+class OthelloEnv(gym.Env):
 
     def __init__(self, render_mode=None, random_offset=None):
         super().__init__()
