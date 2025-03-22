@@ -4,6 +4,7 @@ from typing import Optional
 import pygame
 import copy
 import random
+import os
 
 from logging import getLogger, StreamHandler, DEBUG, INFO
 
@@ -30,7 +31,9 @@ class Board:
             if pygame.font.get_init() == False:
                 pygame.font.init()
 
-            self.font = pygame.font.Font('/work/misc/othello2/gym_othello2/atari.ttf',25)
+            font_path = os.path.join( os.path.dirname(__file__) , 'atari.ttf' )
+            # self.font = pygame.font.Font('/work/misc/othello2/gym_othello2/atari.ttf',25)
+            self.font = pygame.font.Font(font_path,25)
 
     def initialize_board(self):
         self.current_player = PLAYER_WHITE

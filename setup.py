@@ -8,5 +8,6 @@ setup(
     author_email='mo.kazuya@gmail.com',
     url='https://github.com/mo-kazuya/gym_othello.git',
     packages=find_packages(),
+    include_package_data=True,
     python_requires='>=3.8',
 )
