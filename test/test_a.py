@@ -1,5 +1,5 @@
 import unittest
-import othello.envs.othello_env as othello_env
+import gym_othello.envs.othello_env as othello_env
 
 class TestBoard( unittest.TestCase ):
     def test_Board(self):
