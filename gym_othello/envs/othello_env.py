@@ -208,6 +208,13 @@ class Player:
 # from ray.rllib.env.multi_agent_env import MultiAgentEnv
 class OthelloEnv(gym.Env):
 
+    observation_spaces = None
+    action_spaces = None
+    agents = []
+    possible_agents = []
+    observation_space: Optional[gym.Space] = None
+    action_space: Optional[gym.Space] = None
+
     def __init__(self, render_mode=None, random_offset=None):
         super().__init__()
 

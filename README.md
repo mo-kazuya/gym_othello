@@ -6,20 +6,20 @@ petting zooインタフェースに対応したオセロゲーム
 ```
 pip install pygame
 pip install ray[rllib]
-pip install git+https://github.com/mo-kazuya/gym_othello/tree/main/othello/envs
+pip install git+https://github.com/mo-kazuya/gym_othello.git
 ```
 
 
 ## 使い方
 
 ```
-from othello.envs import OthelloEnv
+from gym_othello.envs import OthelloEnv
 env = OthelloEnv()
 env.reset()
 ```
 
 ```
-from othello.envs import OthelloEnv
+from gym_othello.envs import OthelloEnv
 env = OthelloEnv(render_mode='human')
 env.reset()
 ```

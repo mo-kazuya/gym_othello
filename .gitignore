@@ -173,3 +173,6 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 .vscode/settings.json
+gym_othello/rlmodules2.py
+gym_othello/rlmodlues.py
+test/test_rayMultiagent.py
