@@ -300,13 +300,6 @@ class OthelloEnv(gym.Env):
             return self._get_obs(), rewards, terminateds, {}, self._get_info()
 
         # ボードに駒を置く
-        res = Board.place_piece(
-            self.Board, 
-            pos_col,  # col
-            pos_row,  # row
-            self.Board.current_player    
-        )
-        self.current_player = self._get_player()
 
         # 4隅に駒を置いた場合
         if (
@@ -315,8 +308,16 @@ class OthelloEnv(gym.Env):
             or ( pos_col == 0 and pos_row == 7 )
             or ( pos_col == 7 and pos_row == 7 )
         ) :
-            rewards[self._get_player] = 0.25
-            rewards[self._get_opponent] = -0.25
+            rewards[self._get_player()] = 0.5
+            rewards[self._get_opponent()] = -0.5
+
+        res = Board.place_piece(
+            self.Board, 
+            pos_col,  # col
+            pos_row,  # row
+            self.Board.current_player    
+        )
+        self.current_player = self._get_player()
 
         # ゲーム終了判定
         if self.Board.is_game_over():

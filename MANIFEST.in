@@ -1,1 +1,1 @@
-include othello/envs/atari.ttf
+include gym_othello/envs/atari.ttf
