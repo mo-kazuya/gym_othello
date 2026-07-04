@@ -289,6 +289,14 @@ class OthelloEnv(gym.Env):
             return self._get_obs(), rewards, terminateds, {}, self._get_info()
 
         pos = action[self._get_player()]
+
+        # アクション範囲のチェック（0〜63以外は不正手として扱う）
+        if not (0 <= pos < 64):
+            self.logger.info("Invalid action")
+            rewards[self._get_player()] = -10.0
+            terminateds["__all__"] = True
+            return self._get_obs(), rewards, terminateds, {}, self._get_info()
+
         pos_col = pos%8
         pos_row = pos//8
 
@@ -321,8 +329,14 @@ class OthelloEnv(gym.Env):
 
         # ゲーム終了判定
         if self.Board.is_game_over():
-            rewards['white'] = (self.Board.count_white() - self.Board.count_black() + 4 ) // 5.0
-            rewards['black'] = (self.Board.count_black() - self.Board.count_white() + 4 ) // 5.0
+            # 駒数差を5で割った値（切り上げ）をゼロサムで付与する
+            # （旧実装は count_diff の符号によって // 5.0 の切り捨て方向が変わり、
+            #  ゼロサムでなくなるバグがあったため、絶対値に対して切り上げてから符号を戻す）
+            count_diff = self.Board.count_white() - self.Board.count_black()
+            magnitude = (abs(count_diff) + 4) // 5
+            reward_value = magnitude if count_diff > 0 else -magnitude if count_diff < 0 else 0.0
+            rewards['white'] = float(reward_value)
+            rewards['black'] = float(-reward_value)
             # if self.Board.count_white() > self.Board.count_black():
             #     self.logger.info("White wins")
             #     rewards["white"] = 5.0
@@ -418,8 +432,9 @@ class OthelloEnv(gym.Env):
 
             if pygame.font.get_init() == False:
                 pygame.font.init()
-            self.font = pygame.font.Font('/work/misc/othello2/gym_othello2/atari.ttf',25)
-        
+            font_path = os.path.join( os.path.dirname(__file__) , 'atari.ttf' )
+            self.font = pygame.font.Font(font_path,25)
+
             self.Board.draw_board(self.display)
         
         else:
