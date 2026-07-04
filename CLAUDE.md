@@ -62,12 +62,19 @@ README.md                    # Japanese install/usage instructions
     same.
   - Corner moves (0,0 / 7,0 / 0,7 / 7,7) grant a `+0.5` / `-0.5` shaping
     reward to the mover/opponent in addition to any terminal reward.
-  - Terminal reward on game end is `(count_diff + 4) // 5.0` per player
-    (integer floor division against a float — this looks like an existing
-    quirk/bug rather than an intentional design; the commented-out block
-    right above it shows a simpler `+5/-5/+1/+1` win/lose/draw scheme that
-    was replaced). Don't silently "fix" this without flagging it, since it
-    may be intentional reward shaping.
+  - Terminal reward on game end is `ceil(|count_diff| / 5)` magnitude,
+    signed by which side has more pieces, and negated for the loser (so
+    `rewards['white'] == -rewards['black']`, always zero-sum). This
+    replaced an earlier `(count_diff + 4) // 5.0` formula whose floor
+    division on a possibly-negative numerator was not zero-sum (e.g.
+    `count_diff=+1` gave white `+1.0` / black `0.0` instead of a
+    symmetric split) — fixed by taking `ceil` on the absolute value and
+    re-applying the sign afterwards.
+  - `step()` validates that the action integer is in `[0, 64)` before
+    converting it to `(col, row)`; out-of-range actions are treated the
+    same as any other invalid action (`-10.0` penalty, episode ends)
+    instead of raising an `IndexError` or silently wrapping via Python's
+    negative-list-indexing on a bad `row`.
   - `reset(seed=None, options=None)` supports a random opening offset: pass
     `options={"offset": N}`, or construct the env with `random_offset=N` to
     play N random half-moves before returning control (used to diversify
@@ -97,13 +104,12 @@ README.md                    # Japanese install/usage instructions
   never imports/inits pygame's display or font machinery beyond what's
   already loaded at module import time.
 - `atari.ttf` must stay listed in `MANIFEST.in` and referenced via
-  `os.path.join(os.path.dirname(__file__), 'atari.ttf')` (as `Board.__init__`
-  does) — not a hardcoded absolute path. Note `OthelloEnv.reset()` itself
-  still loads the font via a hardcoded local path
-  (`/work/misc/othello2/gym_othello2/atari.ttf`) when `render_mode="human"`;
-  this only matters on that specific machine and will raise `FileNotFoundError`
-  elsewhere — worth fixing to use the same `os.path.join` pattern as `Board`
-  if you touch this code path.
+  `os.path.join(os.path.dirname(__file__), 'atari.ttf')` — both
+  `Board.__init__` and `OthelloEnv.reset()` load the font this way now (the
+  latter previously used a hardcoded local path,
+  `/work/misc/othello2/gym_othello2/atari.ttf`, which raised
+  `FileNotFoundError` for anyone other than the original author on
+  `render_mode="human"`; fixed).
 
 ## Development workflow
 
