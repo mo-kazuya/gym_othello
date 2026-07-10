@@ -25,6 +25,8 @@ gym_othello/
     atari.ttf               # font used for on-screen score/status text (pygame render)
 example/
   example1.ipynb           # demo: random agent vs. human (mouse) agent, render_mode='human'
+  train_dqn.py             # demo: DQN self-play training (PyTorch); --eval-only evaluates vs random
+  dqn_othello.pt           # trained DQN weights (400 episodes, ~77% win rate vs random)
 test/
   test_a.py                 # unittest-based tests for Board and OthelloEnv
 setup.py                    # packaging metadata (no install_requires declared)
@@ -99,6 +101,9 @@ README.md                    # Japanese install/usage instructions
   `pip install git+https://github.com/mo-kazuya/gym_othello.git`. If you
   add real dependency management, update `setup.py` and the README
   together rather than only one.
+- `example/train_dqn.py` additionally requires `torch` (PyTorch); the
+  package itself does not depend on it — keep RL-framework dependencies
+  confined to `example/`.
 - `pygame` (and its font subsystem) is only touched when
   `render_mode="human"`; headless/training usage (`render_mode=None`)
   never imports/inits pygame's display or font machinery beyond what's
