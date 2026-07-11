@@ -29,6 +29,8 @@ example/
   dqn_othello.pt           # trained DQN weights (400 episodes, ~77% win rate vs random)
   train_wthor.py           # demo: supervised policy training from WTHOR game records
   policy_wthor.pt          # policy net trained by train_wthor.py (see file header for data setup)
+  train_ppo_transformer.py # demo: PPO self-play training of a Transformer policy
+  ppo_transformer_othello.pt # trained Transformer weights from train_ppo_transformer.py
   wthor_data/              # (gitignored) .wtb files — real ones from ffothello.org, or
                            # synthetic ones via train_wthor.py --make-synthetic N
 test/
@@ -105,9 +107,10 @@ README.md                    # Japanese install/usage instructions
   `pip install git+https://github.com/mo-kazuya/gym_othello.git`. If you
   add real dependency management, update `setup.py` and the README
   together rather than only one.
-- `example/train_dqn.py` and `example/train_wthor.py` additionally require
-  `torch` (PyTorch); the package itself does not depend on it — keep
-  RL-framework dependencies confined to `example/`.
+- `example/train_dqn.py`, `example/train_wthor.py`, and
+  `example/train_ppo_transformer.py` additionally require `torch`
+  (PyTorch); the package itself does not depend on it — keep RL-framework
+  dependencies confined to `example/`.
 - `example/train_wthor.py` documents the WTHOR (.wtb) binary format in its
   header comment, including the color mapping caveat: WTHOR/standard
   Othello has black moving first, while this env has white moving first
