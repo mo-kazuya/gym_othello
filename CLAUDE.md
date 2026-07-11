@@ -27,6 +27,10 @@ example/
   example1.ipynb           # demo: random agent vs. human (mouse) agent, render_mode='human'
   train_dqn.py             # demo: DQN self-play training (PyTorch); --eval-only evaluates vs random
   dqn_othello.pt           # trained DQN weights (400 episodes, ~77% win rate vs random)
+  train_wthor.py           # demo: supervised policy training from WTHOR game records
+  policy_wthor.pt          # policy net trained by train_wthor.py (see file header for data setup)
+  wthor_data/              # (gitignored) .wtb files — real ones from ffothello.org, or
+                           # synthetic ones via train_wthor.py --make-synthetic N
 test/
   test_a.py                 # unittest-based tests for Board and OthelloEnv
 setup.py                    # packaging metadata (no install_requires declared)
@@ -101,9 +105,14 @@ README.md                    # Japanese install/usage instructions
   `pip install git+https://github.com/mo-kazuya/gym_othello.git`. If you
   add real dependency management, update `setup.py` and the README
   together rather than only one.
-- `example/train_dqn.py` additionally requires `torch` (PyTorch); the
-  package itself does not depend on it — keep RL-framework dependencies
-  confined to `example/`.
+- `example/train_dqn.py` and `example/train_wthor.py` additionally require
+  `torch` (PyTorch); the package itself does not depend on it — keep
+  RL-framework dependencies confined to `example/`.
+- `example/train_wthor.py` documents the WTHOR (.wtb) binary format in its
+  header comment, including the color mapping caveat: WTHOR/standard
+  Othello has black moving first, while this env has white moving first
+  with swapped initial colors — the geometry is identical, so WTHOR games
+  replay directly through `Board` with "WTHOR black ≡ env white".
 - `pygame` (and its font subsystem) is only touched when
   `render_mode="human"`; headless/training usage (`render_mode=None`)
   never imports/inits pygame's display or font machinery beyond what's
