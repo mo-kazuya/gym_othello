@@ -4,10 +4,20 @@
 # 状態価値を出力するネットワークを、自己対戦 + PPO (clipped surrogate)
 # で学習する。白番・黒番は視点相対の観測を共有する1つのネットワーク。
 #
+# 自己対戦だけだと双方が同程度に弱いままなので、一定確率で相手を
+# heuristic_agent.py のミニマックス (角・X打ちを一貫して評価する固定の
+# 強い相手) に差し替えるカリキュラムに対応している (--minimax-prob)。
+# ミニマックス側の手は学習に使わず、学習対象ネットワーク側の軌跡だけを
+# PPO の更新に使う。深さは --minimax-depth-start から
+# --minimax-depth-end まで反復とともに線形に増やす。
+#
 # 使い方:
 #   python example/train_ppo_transformer.py                  # 学習して example/ppo_transformer_othello.pt に保存
 #   python example/train_ppo_transformer.py --iterations 200 # 反復回数を指定
-#   python example/train_ppo_transformer.py --eval-only      # 保存済みモデルをランダムエージェントと対戦評価
+#   python example/train_ppo_transformer.py --eval-only      # 保存済みモデルを対戦評価
+#   python example/train_ppo_transformer.py --init-from example/ppo_transformer_othello.pt \
+#       --minimax-prob 0.3 --minimax-depth-start 1 --minimax-depth-end 2
+#                                                             # 既存モデルからミニマックス混合で再学習
 
 import argparse
 import os
@@ -21,6 +31,7 @@ from torch.distributions import Categorical
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from gym_othello.envs import OthelloEnv
+from heuristic_agent import minimax_action, board_player
 
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 MODEL_PATH = os.path.join(os.path.dirname(__file__), 'ppo_transformer_othello.pt')
@@ -86,32 +97,40 @@ def greedy_action(net, obs):
     return int(np.argmax(logits))
 
 
-# 1エピソード自己対戦し、プレイヤーごとの軌跡を返す。
+# 1エピソード分のデータを集める。
 # 交互手番のため「自分の着手 -> 次の自分の手番」を1遷移とし、
 # その間に発生した報酬 (4隅ボーナス・終局報酬) を自分の遷移に集約する。
-def play_episode(env, net):
+#
+# opponent=None: 自己対戦 (両プレイヤー分の軌跡を返す、これまでと同じ)。
+# opponent を指定した場合: learner_side 側だけを PPO ネットで操作し、
+# もう一方は opponent(env, obs) が決める固定の相手として扱う
+# (相手側の手は学習に使わないため軌跡を記録しない)。
+def play_episode(env, net, opponent=None, learner_side=None):
     obs, _ = env.reset()
+    sides = (learner_side,) if opponent is not None else ('white', 'black')
     traj = {p: {'obs': [], 'mask': [], 'act': [], 'logp': [],
-                'val': [], 'rew': []} for p in ('white', 'black')}
+                'val': [], 'rew': []} for p in sides}
     reward_acc = {'white': 0.0, 'black': 0.0}
     done = False
 
     while not done:
         player = env.current_player
         my_obs = obs[player]
-        t = traj[player]
 
-        # 前回の自分の着手に対する報酬を確定
-        if t['act']:
-            t['rew'].append(reward_acc[player])
-            reward_acc[player] = 0.0
-
-        action, logp, value = sample_action(net, my_obs)
-        t['obs'].append(my_obs['observation'])
-        t['mask'].append(my_obs['action_mask'].flatten())
-        t['act'].append(action)
-        t['logp'].append(logp)
-        t['val'].append(value)
+        if player in traj:
+            t = traj[player]
+            # 前回の自分の着手に対する報酬を確定
+            if t['act']:
+                t['rew'].append(reward_acc[player])
+                reward_acc[player] = 0.0
+            action, logp, value = sample_action(net, my_obs)
+            t['obs'].append(my_obs['observation'])
+            t['mask'].append(my_obs['action_mask'].flatten())
+            t['act'].append(action)
+            t['logp'].append(logp)
+            t['val'].append(value)
+        else:
+            action = opponent(env, my_obs)
 
         obs, rewards, terminateds, _, _ = env.step({player: action})
         for p, r in rewards.items():
@@ -119,7 +138,7 @@ def play_episode(env, net):
         done = terminateds['__all__']
 
     # 終局: 最後の着手の報酬を確定
-    for player in ('white', 'black'):
+    for player in sides:
         if traj[player]['act']:
             traj[player]['rew'].append(reward_acc[player])
     return traj
@@ -139,12 +158,24 @@ def compute_gae(rewards, values, gamma, lam):
     return adv, returns
 
 
-def collect_batch(env, net, n_games, gamma, lam):
-    """n_games 分の自己対戦データを集めて学習用テンソルに整形する。"""
+def collect_batch(env, net, n_games, gamma, lam, minimax_prob=0.0, minimax_depth=1):
+    """n_games 分の対戦データを集めて学習用テンソルに整形する。
+    minimax_prob > 0 の場合、その確率で相手を heuristic_agent のミニマックス
+    (深さ minimax_depth) に差し替え、学習対象ネットワーク側の軌跡だけを使う。
+    残りは通常どおり自己対戦 (両プレイヤー分を使う)。"""
     buf = {k: [] for k in ('obs', 'mask', 'act', 'logp', 'adv', 'ret')}
-    for _ in range(n_games):
-        traj = play_episode(env, net)
-        for player in ('white', 'black'):
+    for i in range(n_games):
+        if minimax_prob > 0 and random.random() < minimax_prob:
+            learner_side = 'white' if i % 2 == 0 else 'black'
+            opponent = lambda env_, obs_: minimax_action(
+                env_.Board, board_player(env_), minimax_depth)
+            traj = play_episode(env, net, opponent=opponent, learner_side=learner_side)
+            sides = (learner_side,)
+        else:
+            traj = play_episode(env, net)
+            sides = ('white', 'black')
+
+        for player in sides:
             t = traj[player]
             if not t['act']:
                 continue
@@ -200,8 +231,8 @@ def ppo_update(net, optimizer, batch, clip_eps, value_coef, entropy_coef,
     return {k: v / stats['n'] for k, v in stats.items() if k != 'n'}
 
 
-def evaluate(net, games=100):
-    """greedy方策 vs ランダムエージェント (手番は交互に持つ)。"""
+def evaluate(net, opponent, games=100):
+    """greedy方策 vs opponent(env, obs) (手番は交互に持つ)。"""
     results = {'win': 0, 'lose': 0, 'draw': 0}
     env = OthelloEnv()
     for i in range(games):
@@ -213,7 +244,7 @@ def evaluate(net, games=100):
             if player == my_player:
                 action = greedy_action(net, obs[player])
             else:
-                action = OthelloEnv.random_agent(obs[player])
+                action = opponent(env, obs[player])
             obs, _, terminateds, _, _ = env.step({player: action})
             done = terminateds['__all__']
         diff = env.Board.count_white() - env.Board.count_black()
@@ -226,6 +257,20 @@ def evaluate(net, games=100):
         else:
             results['draw'] += 1
     return results
+
+
+def random_opponent(env, obs):
+    return OthelloEnv.random_agent(obs)
+
+
+def make_minimax_opponent(depth):
+    return lambda env, obs: minimax_action(env.Board, board_player(env), depth)
+
+
+def report(label, results):
+    total = sum(results.values())
+    print(f"{label} ({total} games): win {results['win']} / lose {results['lose']} "
+          f"/ draw {results['draw']}  (win rate {results['win']/total:.1%})")
 
 
 def main():
@@ -248,6 +293,18 @@ def main():
     parser.add_argument('--eval-games', type=int, default=100)
     parser.add_argument('--seed', type=int, default=0)
     parser.add_argument('--eval-only', action='store_true')
+    parser.add_argument('--init-from', metavar='PATH',
+                        help='学習開始前にこの重みを読み込む (既存モデルからの再学習用)')
+    parser.add_argument('--minimax-prob', type=float, default=0.0,
+                        help='対戦相手をミニマックスに差し替える確率 (0で自己対戦のみ)')
+    parser.add_argument('--minimax-depth-start', type=int, default=1,
+                        help='ミニマックス探索深さの初期値 (学習序盤)')
+    parser.add_argument('--minimax-depth-end', type=int, default=2,
+                        help='ミニマックス探索深さの最終値 (学習終盤)')
+    parser.add_argument('--minimax-depth-ramp-iters', type=int, default=None,
+                        help='深さを start->end へ線形に上げきる反復数 (未指定なら --iterations と同じ)')
+    parser.add_argument('--eval-minimax-depth', type=int, default=2,
+                        help='評価時に対戦させるミニマックスの深さ')
     args = parser.parse_args()
 
     random.seed(args.seed)
@@ -260,20 +317,27 @@ def main():
     if args.eval_only:
         net.load_state_dict(torch.load(MODEL_PATH, map_location=DEVICE))
         net.eval()
-        results = evaluate(net, games=args.eval_games)
-        total = sum(results.values())
-        print(f"vs random ({total} games): "
-              f"win {results['win']} / lose {results['lose']} / draw {results['draw']} "
-              f"(win rate {results['win']/total:.1%})")
+        report('vs random', evaluate(net, random_opponent, games=args.eval_games))
+        report(f'vs minimax(depth={args.eval_minimax_depth})',
+               evaluate(net, make_minimax_opponent(args.eval_minimax_depth), games=args.eval_games))
         return
+
+    if args.init_from:
+        net.load_state_dict(torch.load(args.init_from, map_location=DEVICE))
+        print(f'initialized weights from {args.init_from}')
 
     optimizer = torch.optim.Adam(net.parameters(), lr=args.lr)
     env = OthelloEnv()
+    ramp_iters = args.minimax_depth_ramp_iters or args.iterations
 
     for it in range(1, args.iterations + 1):
+        frac = min(1.0, it / ramp_iters)
+        depth = round(args.minimax_depth_start
+                      + frac * (args.minimax_depth_end - args.minimax_depth_start))
+
         net.eval()  # 収集時はdropout等を無効化 (本モデルはdropout=0だが慣例として)
-        batch = collect_batch(env, net, args.games_per_iter,
-                              args.gamma, args.gae_lambda)
+        batch = collect_batch(env, net, args.games_per_iter, args.gamma, args.gae_lambda,
+                              minimax_prob=args.minimax_prob, minimax_depth=depth)
         net.train()
         stats = ppo_update(net, optimizer, batch, args.clip_eps,
                            args.value_coef, args.entropy_coef,
@@ -281,12 +345,19 @@ def main():
 
         if it % args.eval_every == 0:
             net.eval()
-            results = evaluate(net, games=args.eval_games)
-            total = sum(results.values())
-            print(f"iter {it:4d}  policy_loss {stats['policy_loss']:+.4f}  "
+            r_random = evaluate(net, random_opponent, games=args.eval_games)
+            total = sum(r_random.values())
+            print(f"iter {it:4d}  depth={depth}  policy_loss {stats['policy_loss']:+.4f}  "
                   f"value_loss {stats['value_loss']:.4f}  entropy {stats['entropy']:.3f}  "
-                  f"vs random: win {results['win']:3d} / lose {results['lose']:3d} "
-                  f"/ draw {results['draw']:2d}  (win rate {results['win']/total:.1%})")
+                  f"vs random: win {r_random['win']:3d} / lose {r_random['lose']:3d} "
+                  f"/ draw {r_random['draw']:2d}  (win rate {r_random['win']/total:.1%})")
+            if args.minimax_prob > 0:
+                r_mm = evaluate(net, make_minimax_opponent(args.eval_minimax_depth),
+                                games=args.eval_games)
+                total_mm = sum(r_mm.values())
+                print(f"          vs minimax(depth={args.eval_minimax_depth}): "
+                      f"win {r_mm['win']:3d} / lose {r_mm['lose']:3d} / draw {r_mm['draw']:2d} "
+                      f"(win rate {r_mm['win']/total_mm:.1%})")
 
     torch.save(net.state_dict(), MODEL_PATH)
     print(f'saved model to {MODEL_PATH}')
