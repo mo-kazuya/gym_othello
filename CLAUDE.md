@@ -33,6 +33,8 @@ example/
   ppo_transformer_othello.pt # trained Transformer weights from train_ppo_transformer.py
   wthor_data/              # (gitignored) .wtb files — real ones from ffothello.org, or
                            # synthetic ones via train_wthor.py --make-synthetic N
+  heuristic_agent.py       # demo: non-DNN agent — positional-weight table + minimax/alpha-beta
+                           # (no training; beats all three trained models above at depth=3)
 test/
   test_a.py                 # unittest-based tests for Board and OthelloEnv
 setup.py                    # packaging metadata (no install_requires declared)
