@@ -35,6 +35,11 @@ example/
                            # synthetic ones via train_wthor.py --make-synthetic N
   heuristic_agent.py       # demo: non-DNN agent — positional-weight table + minimax/alpha-beta
                            # (no training; beats all three trained models above at depth=3)
+  transformer_minimax_agent.py # demo: AlphaZero-style hybrid — minimax/alpha-beta search using
+                           # the trained Transformer's value head as leaf evaluator and its
+                           # policy head for move ordering (see file header: still loses cleanly
+                           # to heuristic_agent.py's minimax at matched depth — search alone
+                           # doesn't fix an undertrained leaf evaluator)
 test/
   test_a.py                 # unittest-based tests for Board and OthelloEnv
 setup.py                    # packaging metadata (no install_requires declared)

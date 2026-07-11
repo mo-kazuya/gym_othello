@@ -64,19 +64,29 @@ def evaluate_board(board, player):
     return positional + 2.0 * mobility
 
 
-def minimax(board, player, root_player, depth, alpha, beta):
-    """alpha-beta枝刈り付きミニマックス。root_player視点のスコアを返す。"""
+def minimax(board, player, root_player, depth, alpha, beta,
+            eval_fn=None, move_order_fn=None):
+    """alpha-beta枝刈り付きミニマックス。root_player視点のスコアを返す。
+    eval_fn(board, root_player) -> float を差し替えれば、末端局面の評価を
+    位置評価テーブル以外 (例: 学習済みネットワークの価値ヘッド) に置き換えられる。
+    move_order_fn(board, player, moves) -> moves は展開順を変えて枝刈り効率を
+    上げるためのフック (例: 方策ネットワークのlogits順)。"""
+    eval_fn = eval_fn or evaluate_board
     moves = board.get_valid_moves(player)
     opp = opponent_of(player)
 
     if not moves:
         if board.is_game_over():
-            return evaluate_board(board, root_player)
+            return eval_fn(board, root_player)
         # パス: 手番だけ交代して同じ深さで相手を読む
-        return minimax(board, opp, root_player, depth - 1, alpha, beta)
+        return minimax(board, opp, root_player, depth - 1, alpha, beta,
+                       eval_fn, move_order_fn)
 
     if depth == 0:
-        return evaluate_board(board, root_player)
+        return eval_fn(board, root_player)
+
+    if move_order_fn:
+        moves = move_order_fn(board, player, moves)
 
     maximizing = (player == root_player)
     best = -float('inf') if maximizing else float('inf')
@@ -84,7 +94,7 @@ def minimax(board, player, root_player, depth, alpha, beta):
         child = copy.deepcopy(board)
         child.place_piece(col, row, player)
         score = minimax(child, child.current_player, root_player,
-                        depth - 1, alpha, beta)
+                        depth - 1, alpha, beta, eval_fn, move_order_fn)
         if maximizing:
             best = max(best, score)
             alpha = max(alpha, best)
@@ -96,15 +106,19 @@ def minimax(board, player, root_player, depth, alpha, beta):
     return best
 
 
-def minimax_action(board, player, depth=3):
+def minimax_action(board, player, depth=3, eval_fn=None, move_order_fn=None):
     """ミニマックス探索で最善手を選び、action (0-63) を返す。"""
+    eval_fn = eval_fn or evaluate_board
     moves = board.get_valid_moves(player)
+    if move_order_fn:
+        moves = move_order_fn(board, player, moves)
     best_score, best_move = -float('inf'), moves[0]
     for col, row in moves:
         child = copy.deepcopy(board)
         child.place_piece(col, row, player)
         score = minimax(child, child.current_player, player,
-                        depth - 1, -float('inf'), float('inf'))
+                        depth - 1, -float('inf'), float('inf'),
+                        eval_fn, move_order_fn)
         if score > best_score:
             best_score, best_move = score, (col, row)
     col, row = best_move
