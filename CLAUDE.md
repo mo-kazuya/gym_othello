@@ -40,6 +40,13 @@ example/
                            # policy head for move ordering (see file header: still loses cleanly
                            # to heuristic_agent.py's minimax at matched depth — search alone
                            # doesn't fix an undertrained leaf evaluator)
+  train_alphazero_distill.py # demo: AlphaZero-style expert iteration — self-play with the
+                           # NN-guided search, then distill the search's moves (policy) and
+                           # final disc-diff (value) back into the net; evaluations use random
+                           # openings (reset options={'offset': N}) because deterministic
+                           # agent-vs-agent games repeat just 2 distinct games and are noisy
+  alphazero_transformer_othello.pt # weights after 6 distill iterations (results oscillated;
+                           # no clear gain over the PPO weights — see commit message)
 test/
   test_a.py                 # unittest-based tests for Board and OthelloEnv
 setup.py                    # packaging metadata (no install_requires declared)
